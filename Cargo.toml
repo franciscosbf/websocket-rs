@@ -1,0 +1,22 @@
+[package]
+name = "websocket"
+version = "0.1.0"
+edition = "2024"
+authors = ["Francisco Braço-Forte <f.s.f.b2001@gmail.com>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/franciscosbf/websocket-rs"
+
+[dependencies.tokio]
+version = "1.44.2"
+features = ["rt", "net", "rt-multi-thread"]
+
+[dependencies.futures-util]
+version = "0.3.31"
+
+[dependencies.httparse]
+version = "1.10.1"
+
+[dev-dependencies.tokio]
+version = "1"
+features = ["macros"]
