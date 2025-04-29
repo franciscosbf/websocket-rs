@@ -58,10 +58,6 @@ pub async fn accept(stream: TcpStream) -> Result<Connection, WebSocketError> {
 
     let raw_request = buf.read_raw_http().await?;
 
-    println!("{:?}", unsafe {
-        std::str::from_utf8_unchecked(&raw_request)
-    });
-
     let mut headers = ParsedHeadersBuf::new();
     let request = parse_request(&raw_request, &mut headers)?;
 
@@ -76,10 +72,6 @@ pub async fn accept(stream: TcpStream) -> Result<Connection, WebSocketError> {
     }?;
 
     let raw_response = handshake.to_raw_response();
-
-    println!("{:?}", unsafe {
-        std::str::from_utf8_unchecked(&raw_response)
-    });
 
     buf.write_raw_http(&raw_response).await?;
 
