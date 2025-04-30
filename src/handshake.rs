@@ -251,7 +251,7 @@ impl ServerHanshake {
             .then(|| Self::new(encoded_key.into()))
     }
 
-    pub fn to_raw_response(self) -> Bytes {
+    pub fn into_raw_response(self) -> Bytes {
         let mut buf = BytesMut::new();
 
         buf.put(&b"HTTP/1.1 101 Switching Protocols\r\nSec-WebSocket-Accept: "[..]);

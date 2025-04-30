@@ -71,7 +71,7 @@ pub async fn accept(stream: TcpStream) -> Result<Connection, WebSocketError> {
         }
     }?;
 
-    let raw_response = handshake.to_raw_response();
+    let raw_response = handshake.into_raw_response();
 
     buf.write_raw_http(&raw_response).await?;
 
