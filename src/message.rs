@@ -21,9 +21,19 @@ impl TryFrom<&[u8]> for Text {
     }
 }
 
+impl TryFrom<Vec<u8>> for Text {
+    type Error = std::str::Utf8Error;
+
+    fn try_from(raw: Vec<u8>) -> Result<Self, Self::Error> {
+        raw.as_slice().try_into()
+    }
+}
+
 impl From<&str> for Text {
     fn from(raw: &str) -> Self {
-        Text(Bytes::copy_from_slice(raw.as_bytes()))
+        let valid_utf8 = raw.as_bytes();
+
+        Text(Bytes::copy_from_slice(valid_utf8))
     }
 }
 
