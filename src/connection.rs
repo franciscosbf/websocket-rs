@@ -328,27 +328,27 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new_client_connection(stream: TcpStream) -> Self {
+    pub(crate) fn new_client_connection(stream: TcpStream) -> Self {
         let controller = Manager::start_manager(stream, true);
 
         Self { controller }
     }
 
-    pub fn new_server_connection(stream: TcpStream) -> Self {
+    pub(crate) fn new_server_connection(stream: TcpStream) -> Self {
         let controller = Manager::start_manager(stream, false);
 
         Self { controller }
     }
 
-    async fn send(&self, message: Message) -> Result<(), WebSocketError> {
+    pub async fn send(&self, message: Message) -> Result<(), WebSocketError> {
         self.controller.send(message).await
     }
 
-    async fn receive(&self) -> Result<Message, WebSocketError> {
+    pub async fn receive(&self) -> Result<Message, WebSocketError> {
         self.controller.receive().await
     }
 
-    async fn stop(self) {
+    pub async fn stop(self) {
         self.controller.stop().await;
     }
 }
