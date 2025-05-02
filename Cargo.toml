@@ -9,7 +9,7 @@ repository = "https://github.com/franciscosbf/websocket-rs"
 
 [dependencies.tokio]
 version = "1.44.2"
-features = ["rt", "net", "rt-multi-thread", "io-util"]
+features = ["rt", "net", "rt-multi-thread", "io-util", "sync"]
 
 [dependencies.futures-util]
 version = "0.3.31"
@@ -31,6 +31,10 @@ version = "0.9.1"
 
 [dependencies.thiserror]
 version = "2.0.12"
+
+[dependencies.flume]
+version = "0.11.1"
+features = ["async"]
 
 [dev-dependencies.tokio]
 version = "1"

@@ -7,7 +7,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::error::WebSocketError;
+use crate::error::InvalidHandshake;
 
 pub const MAX_HEADERS: usize = 124;
 
@@ -50,11 +50,11 @@ pub struct ParsedResponse<'r>(httparse::Response<'r, 'r>);
 pub fn parse_response<'r>(
     raw: &'r [u8],
     headers_buf: &'r mut ParsedHeadersBuf<'r>,
-) -> Result<ParsedResponse<'r>, WebSocketError> {
+) -> Result<ParsedResponse<'r>, InvalidHandshake> {
     let mut response = httparse::Response::new(headers_buf);
     response
         .parse(raw)
-        .map_err(WebSocketError::HttpResponseParser)?;
+        .map_err(InvalidHandshake::HttpResponseParser)?;
 
     Ok(ParsedResponse(response))
 }
@@ -73,11 +73,11 @@ pub struct ParsedRequest<'r>(httparse::Request<'r, 'r>);
 pub fn parse_request<'r>(
     raw: &'r [u8],
     headers_buf: &'r mut ParsedHeadersBuf<'r>,
-) -> Result<ParsedRequest<'r>, WebSocketError> {
+) -> Result<ParsedRequest<'r>, InvalidHandshake> {
     let mut request = httparse::Request::new(headers_buf);
     request
         .parse(raw)
-        .map_err(WebSocketError::HttpRequestParser)?;
+        .map_err(InvalidHandshake::HttpRequestParser)?;
 
     Ok(ParsedRequest(request))
 }
@@ -179,9 +179,9 @@ impl ClientHandshake {
         buf.into()
     }
 
-    pub fn is_valid_response(&self, response: &ParsedResponse<'_>) -> bool {
+    pub fn validate_response(&self, response: &ParsedResponse<'_>) -> Result<(), InvalidHandshake> {
         if !matches!((response.version, response.code), (Some(1), Some(101))) {
-            return false;
+            return Err(InvalidHandshake::NonConformant);
         }
 
         let mut contains_headers = [0, 0];
@@ -195,13 +195,18 @@ impl ClientHandshake {
                 if self.key.encoded_hash() == h.value {
                     valid_key = true;
                 } else {
-                    return false;
+                    return Err(InvalidHandshake::NonConformant);
                 }
             } else if h.is_any_key(&["Sec-WebSocket-Extensions", "Sec-WebSocket-Protocol"]) {
-                return false;
+                return Err(InvalidHandshake::NonConformant);
             }
         }
-        contains_headers.iter().all(|&c| c > 0) && valid_key
+
+        if contains_headers.iter().all(|&c| c > 0) && valid_key {
+            Ok(())
+        } else {
+            Err(InvalidHandshake::NonConformant)
+        }
     }
 }
 
@@ -215,12 +220,12 @@ impl ServerHanshake {
         Self { key }
     }
 
-    pub fn from_request(request: &ParsedRequest<'_>) -> Option<Self> {
+    pub fn try_from_request(request: &ParsedRequest<'_>) -> Result<Self, InvalidHandshake> {
         if !matches!(
             (request.0.method, request.0.path, request.0.version),
             (Some("GET"), Some("/"), Some(1))
         ) {
-            return None;
+            return Err(InvalidHandshake::NonConformant);
         }
 
         let mut contains_headers = [0, 0, 0, 0, 0];
@@ -245,10 +250,11 @@ impl ServerHanshake {
                 }
             });
 
-        contains_headers
-            .iter()
-            .all(|&c| c > 0)
-            .then(|| Self::new(encoded_key.into()))
+        if contains_headers.iter().all(|&c| c > 0) {
+            Ok(Self::new(encoded_key.into()))
+        } else {
+            Err(InvalidHandshake::NonConformant)
+        }
     }
 
     pub fn into_raw_response(self) -> Bytes {

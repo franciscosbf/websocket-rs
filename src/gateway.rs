@@ -45,11 +45,9 @@ impl Buf {
     }
 }
 
-impl From<Buf> for Connection {
+impl From<Buf> for TcpStream {
     fn from(buf: Buf) -> Self {
-        let stream = buf.bstream.into_inner();
-
-        Connection::new(stream)
+        buf.bstream.into_inner()
     }
 }
 
@@ -61,21 +59,24 @@ pub async fn accept(stream: TcpStream) -> Result<Connection, WebSocketError> {
     let mut headers = ParsedHeadersBuf::new();
     let request = parse_request(&raw_request, &mut headers)?;
 
-    let handshake = match ServerHanshake::from_request(&request) {
-        Some(handshake) => Ok(handshake),
-        None => {
+    let handshake = match ServerHanshake::try_from_request(&request) {
+        Ok(handshake) => handshake,
+        Err(e) => {
             buf.write_raw_http(&b"HTTP/1.1 400 Bad Request\r\n\r\n"[..])
                 .await?;
 
-            Err(WebSocketError::InvalidHandshake)
+            return Err(e.into());
         }
-    }?;
+    };
 
     let raw_response = handshake.into_raw_response();
 
     buf.write_raw_http(&raw_response).await?;
 
-    Ok(buf.into())
+    let stream = buf.into();
+    let connection = Connection::new_server_connection(stream);
+
+    Ok(connection)
 }
 
 pub async fn connect(addr: SocketAddr) -> Result<Connection, WebSocketError> {
@@ -93,9 +94,10 @@ pub async fn connect(addr: SocketAddr) -> Result<Connection, WebSocketError> {
     let mut headers = ParsedHeadersBuf::new();
     let response = parse_response(&raw_response, &mut headers)?;
 
-    if !handshake.is_valid_response(&response) {
-        return Err(WebSocketError::InvalidHandshake);
-    }
+    handshake.validate_response(&response)?;
 
-    Ok(buf.into())
+    let stream = buf.into();
+    let connection = Connection::new_client_connection(stream);
+
+    Ok(connection)
 }
