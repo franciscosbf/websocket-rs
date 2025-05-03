@@ -180,6 +180,10 @@ struct Controller {
 
 impl Controller {
     async fn send(&self, message: Message) -> Result<(), WebSocketError> {
+        if message.size() > MAX_MESSAGE_SIZE {
+            return Err(WebSocketError::InvalidMessageSize);
+        }
+
         self.send_tx
             .send_async(message)
             .await
