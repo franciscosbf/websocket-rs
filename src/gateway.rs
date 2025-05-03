@@ -74,7 +74,7 @@ pub async fn accept(stream: TcpStream) -> Result<Connection, WebSocketError> {
     buf.write_raw_http(&raw_response).await?;
 
     let stream = buf.into();
-    let connection = Connection::new_server_connection(stream);
+    let connection = Connection::server_side(stream);
 
     Ok(connection)
 }
@@ -97,7 +97,7 @@ pub async fn connect(addr: SocketAddr) -> Result<Connection, WebSocketError> {
     handshake.validate_response(&response)?;
 
     let stream = buf.into();
-    let connection = Connection::new_client_connection(stream);
+    let connection = Connection::client_side(stream);
 
     Ok(connection)
 }
