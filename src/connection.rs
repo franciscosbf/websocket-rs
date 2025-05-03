@@ -299,7 +299,9 @@ impl Manager {
             self.stream.write_u32(masking_key).await?;
             xor_payload(masking_key, &mut payload);
         }
-        self.stream.write_all(&payload).await?;
+        if payload_length > 0 {
+            self.stream.write_all(&payload).await?;
+        }
 
         Ok(())
     }
