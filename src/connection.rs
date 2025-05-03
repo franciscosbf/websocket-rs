@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use bytes::{Bytes, BytesMut};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -155,10 +156,16 @@ impl Frame {
     }
 }
 
+#[derive(Debug)]
+enum Mask {
+    Client,
+    Server,
+}
+
 fn xor_payload(masking_key: u32, payload: &mut [u8]) {
     let masking_key = masking_key.to_be_bytes();
     payload
-        .iter_mut()
+        .par_iter_mut()
         .enumerate()
         .for_each(|(i, b)| *b ^= masking_key[i % 4]);
 }
@@ -197,7 +204,7 @@ impl Controller {
 #[derive(Debug)]
 struct Manager {
     stream: TcpStream,
-    mask: bool,
+    mask: Mask,
 }
 
 impl Manager {
@@ -217,8 +224,10 @@ impl Manager {
 
         let octet = self.stream.read_u8().await?;
         let masked = (octet >> 7) & 1 != 0;
-        if !masked && self.mask {
-            return Err(InvalidFrame::Inconsistent.into());
+        match self.mask {
+            Mask::Client if !masked => (),
+            Mask::Server if masked => (),
+            _ => return Err(InvalidFrame::PayloadSize.into()),
         }
         let possible_payload_length = octet ^ (1 << 8);
         let payload_length = match possible_payload_length {
@@ -231,20 +240,24 @@ impl Manager {
             return Err(InvalidFrame::PayloadSize.into());
         }
 
-        let masking_key = if self.mask {
+        let masking_key = if let Mask::Server = self.mask {
             Some(self.stream.read_u32().await?)
         } else {
             None
         };
 
-        let mut payload = BytesMut::with_capacity(payload_length);
-        if payload_length > 0 {
+        let payload = if payload_length > 0 {
+            let mut payload = BytesMut::with_capacity(payload_length);
             self.stream.read_exact(&mut payload).await?;
-            if self.mask {
+
+            if let Mask::Server = self.mask {
                 xor_payload(masking_key.unwrap(), &mut payload);
             }
-        }
-        let payload = payload.into();
+
+            payload.into()
+        } else {
+            Bytes::new()
+        };
 
         let raw_frame = RawFrame {
             fin,
@@ -261,7 +274,10 @@ impl Manager {
         let octet = (fin << 8) | opcode;
         self.stream.write_u8(octet).await?;
 
-        let masked = if self.mask { 1 } else { 0 };
+        let masked = match self.mask {
+            Mask::Client => 1,
+            Mask::Server => 0,
+        };
         let mut octet = masked << 8;
         let payload_length = raw_frame.payload.len();
         octet |= match payload_length {
@@ -278,7 +294,7 @@ impl Manager {
         }
 
         let mut payload: BytesMut = raw_frame.payload.into();
-        if self.mask {
+        if let Mask::Client = self.mask {
             let masking_key = rand::random::<u32>();
             self.stream.write_u32(masking_key).await?;
             xor_payload(masking_key, &mut payload);
@@ -288,7 +304,7 @@ impl Manager {
         Ok(())
     }
 
-    fn start_manager(stream: TcpStream, mask: bool) -> Controller {
+    fn start_manager(stream: TcpStream, mask: Mask) -> Controller {
         let (send_tx, send_rx) = flume::unbounded();
         let (receive_tx, receive_rx) = flume::unbounded();
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
@@ -309,7 +325,9 @@ impl Manager {
 
                         todo!()
                     },
-                    _ = stop_rx => return,
+                    _ = stop_rx => {
+                        todo!()
+                    },
                 }
             }
         });
@@ -329,13 +347,13 @@ pub struct Connection {
 
 impl Connection {
     pub(crate) fn new_client_connection(stream: TcpStream) -> Self {
-        let controller = Manager::start_manager(stream, true);
+        let controller = Manager::start_manager(stream, Mask::Client);
 
         Self { controller }
     }
 
     pub(crate) fn new_server_connection(stream: TcpStream) -> Self {
-        let controller = Manager::start_manager(stream, false);
+        let controller = Manager::start_manager(stream, Mask::Server);
 
         Self { controller }
     }
