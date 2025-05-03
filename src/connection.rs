@@ -227,7 +227,7 @@ impl Handler {
         match self.mask {
             Mask::ClientSide if !masked => (),
             Mask::ServerSide if masked => (),
-            _ => return Err(InvalidFrame::PayloadSize.into()),
+            _ => return Err(InvalidFrame::Inconsistent.into()),
         }
         let possible_payload_length = octet ^ (1 << 8);
         let payload_length = match possible_payload_length {
