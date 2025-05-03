@@ -87,6 +87,13 @@ pub enum Message {
 }
 
 impl Message {
+    pub fn size(&self) -> usize {
+        match self {
+            Self::Text(text) => text.len(),
+            Self::Binary(binary) => binary.len(),
+        }
+    }
+
     pub fn is_text(&self) -> bool {
         matches!(self, Self::Text(_))
     }
